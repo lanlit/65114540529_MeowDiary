@@ -31,6 +31,8 @@ from nltk import NaiveBayesClassifier as nbc
 from pythainlp.tokenize import word_tokenize
 import codecs
 from itertools import chain
+from MyApp.utils.naive_sentiment import predict_sentiment
+
 
 
 # View สำหรับการเข้าสู่ระบบ
@@ -286,75 +288,37 @@ def diary_form(request):
 
 
 # ฟังก์ชัน[ยันทึกไดอารี่]
-# โหลดคำในเชิงบวกและเชิงลบ
-def load_keywords():
-    with open('MyApp/data/positive.txt', 'r', encoding='utf-8') as f:
-        positive_words = f.read().splitlines()
-
-    with open('MyApp/data/negative.txt', 'r', encoding='utf-8') as f:
-        negative_words = f.read().splitlines()
-
-    return positive_words, negative_words
-
-# ฟังก์ชันทำนาย label
-def predict_label(content, positive_words, negative_words):
-    # นับจำนวนคำในแต่ละประเภท
-    tokens = word_tokenize(content, keep_whitespace=False)
-    print("คำ:", tokens)
-    positive_count = sum(1 for word in tokens if word in positive_words)
-    negative_count = sum(1 for word in tokens if word in negative_words)
-
-    
-    if positive_count > negative_count:
-        return 1  # บวก
-    elif negative_count > positive_count:
-        return 0  # ลบ
-    else:
-        return None  # ไม่มีความชัดเจน
-        
-    
-
 @login_required
 def save_diary(request):
     if request.method == 'POST':
-        try:
-            diary_content = request.POST.get('content')  # รับข้อมูลเนื้อหาจากฟอร์ม
-            diary_date = request.POST.get('date')  # รับข้อมูลวันที่จากฟอร์ม
-            diary_image = request.FILES.get('image')  # รับไฟล์ภาพจากฟอร์ม
+        diary_content = request.POST.get('content')
+        diary_date = request.POST.get('date')
+        diary_image = request.FILES.get('image')
 
-            if not diary_content or not diary_date:  # ตรวจสอบว่าไม่มีเนื้อหา หรือวันที่
-                messages.error(request, 'กรุณากรอกเนื้อหาของไดอารี่และเลือกวันที่')  # แจ้งเตือนหากไม่มีการกรอกเนื้อหา
-                return redirect('diary_form')  # เปลี่ยนเส้นทางกลับไปที่ฟอร์ม
-
-            # โหลดคำศัพท์เชิงบวกและเชิงลบ
-            positive_words, negative_words = load_keywords()
-
-            # ทำนาย label จากเนื้อหา
-            label = predict_label(diary_content, positive_words, negative_words)
-
-            # บันทึกข้อมูลไดอรี่ลงในฐานข้อมูล โดยตั้งค่า owner ให้เป็นผู้ใช้ที่ล็อกอิน
-            new_diary = Diary(content=diary_content, date=diary_date, image=diary_image, owner=request.user, label=label)
-            new_diary.save()
-            print(f"บันทึกไดอารี่ใหม่: {new_diary}")
-            print(f"เนื้อหา: {diary_content}")
-            print(f"วันที่: {diary_date}")
-            print(f"ภาพ: {diary_image}")
-            print(f"เจ้าของ: {request.user}")
-            print(f"label ที่ทำนาย: {label}")
-            # แสดงข้อความสำเร็จ
-            messages.success(request, 'ไดอารี่ถูกบันทึกเรียบร้อยแล้ว!')
-            return redirect('list_view')  # เปลี่ยนเส้นทางไปที่หน้าแสดงรายการไดอารี่
-        
-        except Exception as e:
-            print(f"เกิดข้อผิดพลาดในการบันทึกไดอารี่: {e}")
-            messages.error(request, f'เกิดข้อผิดพลาดในการบันทึกไดอารี่: {e}')
+        if not diary_content or not diary_date:
+            messages.error(request, 'กรุณากรอกเนื้อหาและวันที่')
             return redirect('diary_form')
 
-    return render(request, 'diary/diary_form.html')
-    
+        predicted = predict_sentiment(diary_content)
+        label = 1 if predicted == 'pos' else 0
 
+        #Debug ผลลัพธ์จากโมเดล
+        print(" เนื้อหา:", diary_content)
+        print(" วันที่:", diary_date)
+        print(" ชื่อไฟล์รูป:", diary_image.name if diary_image else "ไม่ได้ใส่รูป")
+        print(" ผลการวิเคราะห์:", predicted)
+        print(" ค่าlabel:", label)
 
+        Diary.objects.create(
+            content=diary_content,
+            date=diary_date,
+            image=diary_image,
+            owner=request.user,
+            label=label
+        )
 
+        messages.success(request, 'บันทึกไดอารี่เรียบร้อยแล้ว!')
+        return redirect('list_view')
 
 def diary_detail_view(request, diary_id):
     diary_entry = get_object_or_404(Diary, id=diary_id, owner=request.user)
