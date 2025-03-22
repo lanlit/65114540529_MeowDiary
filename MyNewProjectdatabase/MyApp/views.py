@@ -32,6 +32,7 @@ from pythainlp.tokenize import word_tokenize
 import codecs
 from itertools import chain
 
+
 # View สำหรับการเข้าสู่ระบบ
 
 def login_view(request):
@@ -298,8 +299,11 @@ def load_keywords():
 # ฟังก์ชันทำนาย label
 def predict_label(content, positive_words, negative_words):
     # นับจำนวนคำในแต่ละประเภท
-    positive_count = sum(1 for word in positive_words if word in content)
-    negative_count = sum(1 for word in negative_words if word in content)
+    tokens = word_tokenize(content, keep_whitespace=False)
+    print("คำ:", tokens)
+    positive_count = sum(1 for word in tokens if word in positive_words)
+    negative_count = sum(1 for word in tokens if word in negative_words)
+
     
     if positive_count > negative_count:
         return 1  # บวก
@@ -307,6 +311,8 @@ def predict_label(content, positive_words, negative_words):
         return 0  # ลบ
     else:
         return None  # ไม่มีความชัดเจน
+        
+    
 
 @login_required
 def save_diary(request):
